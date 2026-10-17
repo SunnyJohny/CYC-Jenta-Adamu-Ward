@@ -27,7 +27,7 @@ const CONTENT_COLLECTIONS = {
   platforms: "platforms",
   comments: "comments"
 };
-const CONTRIBUTION_COLLECTIONS = new Set(["executives", "gallery"]);
+const CONTRIBUTION_COLLECTIONS = new Set(["executives", "gallery", "news"]);
 const emptyContent = () => Object.fromEntries(Object.keys(CONTENT_COLLECTIONS).map(key => [key, []]));
 const emptyPrivateData = () => ({
   users: [],
