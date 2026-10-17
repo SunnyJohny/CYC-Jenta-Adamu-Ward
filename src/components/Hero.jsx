@@ -1,234 +1,358 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-scroll";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMyContext } from "../Context/MyContext";
 
-const Hero = () => {
-  const { documentaries = [] } = useMyContext();
+const EMPTY_ITEMS = [];
 
-  const photoHighlights = documentaries.filter(
-    (item) =>
-      item.category === "photo-highlights" &&
-      item.mediaType === "photo" &&
-      item.mediaUrl
-  );
+const FOCUS_HIGHLIGHTS = [
+  "Youth unity and peaceful coexistence",
+  "Skills, learning and self-reliance",
+  "Community participation and development",
+  "Leadership and responsibility",
+  "Working together for Jenta Adamu Ward",
+  "Build the Youth, Build the Nation",
+];
+
+const Hero = () => {
+  const {
+    publishedGallery = EMPTY_ITEMS,
+    publishedDocumentaries,
+    documentaries = EMPTY_ITEMS,
+    cycProfile,
+  } = useMyContext();
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [failedImages, setFailedImages] = useState([]);
+  const [fallbackFailed, setFallbackFailed] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [headerOffset, setHeaderOffset] = useState(180);
 
-  const title = "THE NEW DAWN";
-  const subtitle = "Leadership in Action, A State in Motion";
+  const title = cycProfile?.title || "Central Youth Council";
+  const subtitle = "Jenta Adamu Ward · Jos North";
+  const slogan = cycProfile?.slogan || "Build the Youth, Build the Nation";
+  const logoUrl = cycProfile?.logoUrl || "/images/cyclogo.png";
 
-  const progressHighlights = [
-    "Documenting governance in motion",
-    "Public engagement and enlightenment",
-    "Leadership in Action, A State in Motion",
-    "Capturing Niger State’s development trajectory",
-    "Stories of progress, transparency, and continuity",
-    "A strategic multimedia programme for the people",
-  ];
+  const slides = useMemo(() => {
+    const isPublicPhoto = (item) => {
+      const url = item.mediaUrl || item.imageUrl;
+      if (item.status !== "published" || !url || failedImages.includes(url)) {
+        return false;
+      }
+      const type = String(item.mediaType || "").toLowerCase();
+      return (
+        type === "photo" ||
+        type === "image" ||
+        (!type && Boolean(item.imageUrl))
+      );
+    };
 
-  const tickerText = `${progressHighlights.join("   ✦   ")}   ✦   ${progressHighlights.join(
-    "   ✦   "
-  )}`;
+    const galleryPhotos = publishedGallery.filter(isPublicPhoto);
+    const legacyPhotos = (publishedDocumentaries || documentaries).filter(
+      (item) => isPublicPhoto(item) && item.category === "photo-highlights"
+    );
+    const candidates = galleryPhotos.length ? galleryPhotos : legacyPhotos;
+    const seen = new Set();
+
+    return candidates
+      .map((item) => ({
+        id: item.id || item.mediaUrl || item.imageUrl,
+        url: item.mediaUrl || item.imageUrl,
+      }))
+      .filter((item) => {
+        if (!item.url || failedImages.includes(item.url) || seen.has(item.url)) {
+          return false;
+        }
+        seen.add(item.url);
+        return true;
+      });
+  }, [publishedGallery, publishedDocumentaries, documentaries, failedImages]);
+
+  const activeIndex = slides.length ? currentIndex % slides.length : 0;
+  const motionPaused = isPaused || reducedMotion;
 
   useEffect(() => {
-    if (photoHighlights.length === 0) return;
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setReducedMotion(preference.matches);
+    updatePreference();
+    preference.addEventListener("change", updatePreference);
+    return () => preference.removeEventListener("change", updatePreference);
+  }, []);
 
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) =>
-        prev === photoHighlights.length - 1 ? 0 : prev + 1
-      );
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (!header) return undefined;
+
+    const measureHeader = () =>
+      setHeaderOffset(Math.ceil(header.getBoundingClientRect().height) + 20);
+
+    measureHeader();
+    window.addEventListener("resize", measureHeader);
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(measureHeader)
+        : null;
+    observer?.observe(header);
+
+    return () => {
+      window.removeEventListener("resize", measureHeader);
+      observer?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (slides.length < 2 || motionPaused) return undefined;
+
+    const interval = window.setInterval(() => {
+      setCurrentIndex((previous) => (previous + 1) % slides.length);
     }, 7000);
 
-    return () => clearInterval(interval);
-  }, [photoHighlights.length]);
+    return () => window.clearInterval(interval);
+  }, [slides.length, motionPaused]);
 
-  const renderAnimatedLetters = (text, baseDelay = 0) =>
-    text.split("").map((letter, index) => (
-      <span
-        key={`${letter}-${index}`}
-        className="intro-letter inline-block"
-        style={{
-          animationDelay: `${baseDelay + index * 0.07}s`,
-        }}
-      >
-        {letter === " " ? "\u00A0" : letter}
-      </span>
+  const handleImageError = (url) => {
+    setFailedImages((previous) =>
+      previous.includes(url) ? previous : [...previous, url]
+    );
+  };
+
+  const scrollToSection = (event, id) => {
+    const target = document.getElementById(id);
+    if (!target) return;
+    event.preventDefault();
+
+    const header = document.querySelector("header");
+    const offset = (header?.getBoundingClientRect().height || 120) + 12;
+
+    window.scrollTo({
+      top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - offset),
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+  };
+
+  const renderAnimatedLetters = (text, baseDelay = 0) => {
+    let letterIndex = 0;
+    return String(text).split(" ").map((word, wordIndex) => (
+      <React.Fragment key={`${word}-${wordIndex}`}>
+        {wordIndex > 0 && " "}
+        <span className="inline-block whitespace-nowrap">
+          {Array.from(word).map((letter, index) => {
+            const delay = baseDelay + letterIndex++ * 0.035;
+            return (
+              <span
+                key={`${letter}-${index}`}
+                className="cyc-hero-letter inline-block"
+                style={{ animationDelay: `${delay}s` }}
+              >
+                {letter}
+              </span>
+            );
+          })}
+        </span>
+      </React.Fragment>
     ));
+  };
 
   return (
     <section
       id="home"
-      className="relative w-full min-h-screen pt-[170px] md:pt-[155px] lg:pt-[145px] flex items-center justify-center text-center overflow-hidden"
+      aria-labelledby="cyc-hero-title"
+      className="cyc-hero relative isolate flex min-h-screen w-full items-center justify-center overflow-hidden bg-[#034324] text-center"
+      style={{ paddingTop: headerOffset }}
     >
       <style>{`
-        @keyframes introLogo {
-          0% { opacity: 0; transform: scale(0.85); }
-          20% { opacity: 1; transform: scale(1); }
-          70% { opacity: 1; transform: scale(1); }
-          100% { opacity: 0; transform: scale(0.9); visibility: hidden; }
+        @keyframes cycHeroLogoReveal {
+          from { opacity: 0; transform: scale(0.85); }
+          to { opacity: 1; transform: scale(1); }
         }
-
-        @keyframes letterDropBounce {
-          0% {
-            opacity: 0;
-            transform: translateY(-95px) scale(0.95);
-          }
-          55% {
-            opacity: 1;
-            transform: translateY(12px) scale(1.05);
-          }
-          72% {
-            transform: translateY(-8px) scale(0.98);
-          }
-          88% {
-            transform: translateY(4px) scale(1.01);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        @keyframes introWriteupDisappear {
-          0% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-          80% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-          100% {
-            opacity: 0;
-            transform: translateY(30px);
-            visibility: hidden;
-          }
-        }
-
-        @keyframes newDawnTicker {
-          0% { transform: translateX(0%); }
-          100% { transform: translateX(-50%); }
-        }
-
-        @keyframes ribbonReveal {
-          0% { opacity: 0; transform: translateY(18px); }
-          70% { opacity: 0; transform: translateY(18px); }
+        @keyframes cycHeroLetterBounce {
+          0% { opacity: 0; transform: translateY(-36px); }
+          60% { opacity: 1; transform: translateY(5px); }
+          80% { transform: translateY(-3px); }
           100% { opacity: 1; transform: translateY(0); }
         }
-
-        .intro-logo {
-          animation: introLogo 6s ease-in-out forwards;
+        @keyframes cycHeroTicker {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
         }
-
-        .intro-writeup {
-          animation: introWriteupDisappear 9.5s ease-in-out forwards;
+        .cyc-hero { min-height: 100svh; }
+        .cyc-hero .cyc-hero-logo {
+          animation: cycHeroLogoReveal 0.8s ease-out both;
         }
-
-        .intro-letter {
-          opacity: 0;
-          animation: letterDropBounce 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        .cyc-hero .cyc-hero-letter {
+          animation: cycHeroLetterBounce 0.65s ease-out both;
         }
-
-        .new-dawn-progress-ribbon {
-          animation: ribbonReveal 7s ease-out forwards;
+        .cyc-hero .cyc-ticker-track {
+          display: flex;
+          width: max-content;
+          animation: cycHeroTicker 48s linear infinite;
         }
-
-        .new-dawn-ticker-track {
-          animation: newDawnTicker 48s linear infinite;
+        .cyc-hero .cyc-ticker-window:hover .cyc-ticker-track {
+          animation-play-state: paused;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .cyc-hero .cyc-hero-logo,
+          .cyc-hero .cyc-hero-letter,
+          .cyc-hero .cyc-ticker-track {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+          .cyc-hero .cyc-slide { transition: none !important; }
         }
       `}</style>
 
-      {/* BACKGROUND */}
-      <div className="absolute inset-0">
-        {photoHighlights.length > 0 ? (
-          photoHighlights.map((item, index) => (
+      {/* Background photos are decorative; the council name is in the heading. */}
+      <div className="absolute inset-0 -z-10" aria-hidden="true">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#065F2F] via-[#034324] to-[#011F13]" />
+
+        {slides.length ? (
+          slides.map((slide, index) => (
             <img
-              key={item.id}
-              src={item.mediaUrl}
-              alt={item.title || "The New Dawn Photo Highlight"}
-              className={`absolute inset-0 w-full h-full object-cover object-[center_top] sm:object-center transition-all duration-[4000ms] ease-in-out ${
-                index === currentIndex
-                  ? "opacity-100 scale-105"
-                  : "opacity-0 scale-100"
+              key={slide.url}
+              src={slide.url}
+              alt=""
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+              onError={() => handleImageError(slide.url)}
+              className={`cyc-slide absolute inset-0 h-full w-full object-cover object-[center_top] transition-opacity duration-[1500ms] sm:object-center ${
+                index === activeIndex ? "opacity-100" : "opacity-0"
               }`}
             />
           ))
         ) : (
-          <img
-            src="/images/hero-bg.jpg"
-            alt="The New Dawn Background"
-            className="absolute inset-0 w-full h-full object-cover object-[center_top] sm:object-center"
-          />
+          !fallbackFailed && (
+            <img
+              src="/images/cyc-hero.jpg"
+              alt=""
+              onError={() => setFallbackFailed(true)}
+              className="absolute inset-0 h-full w-full object-cover object-center"
+            />
+          )
         )}
 
-        <div className="absolute inset-0 bg-black/35"></div>
-        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/55"></div>
+        <div className="absolute inset-0 bg-black/45" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#012C1A]/55 via-transparent to-[#012C1A]/90" />
       </div>
 
-      {/* LOGO INTRO */}
-      <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+      {/* This content stays visible after the entrance animation. */}
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-5 pb-44 pt-6 sm:px-8 md:pb-40 md:pt-10">
         <img
-          src="/images/New-DawnLogo.png"
-          alt="Intro Logo"
-          className="intro-logo w-32 md:w-48 lg:w-56 object-contain"
+          src={logoUrl}
+          alt="Plateau State Youth Council emblem"
+          width="112"
+          height="112"
+          className="cyc-hero-logo mx-auto mb-6 h-20 w-20 object-contain drop-shadow-lg md:h-28 md:w-28"
         />
-      </div>
 
-      {/* 🔥 BOUNCING WRITE-UP ONLY */}
-      <div className="intro-writeup absolute inset-0 z-20 flex items-end justify-center px-6 pb-44 md:pb-52 pointer-events-none">
-        <div className="max-w-4xl">
-          <h1 className="text-white text-3xl md:text-5xl lg:text-6xl font-extrabold mb-4 leading-tight tracking-wide drop-shadow-lg">
-            {renderAnimatedLetters(title, 1.2)}
-          </h1>
+        <p className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-[#BFE8A8] sm:text-sm">
+          Youth · Community · Progress
+        </p>
 
-          <p className="text-[#F2B705] text-base md:text-xl font-semibold italic mb-7 drop-shadow-lg">
-            {renderAnimatedLetters(subtitle, 2.3)}
-          </p>
+        <h1
+          id="cyc-hero-title"
+          className="mb-4 text-3xl font-extrabold uppercase leading-tight tracking-wide text-white drop-shadow-lg sm:text-5xl lg:text-6xl"
+        >
+          <span className="sr-only">{title}</span>
+          <span aria-hidden="true">{renderAnimatedLetters(title, 0.2)}</span>
+        </h1>
 
-          <div className="flex justify-center">
-            <Link
-              to="about"
-              smooth={true}
-              duration={500}
-              offset={-120}
-              className="border border-[#F2B705] text-[#F2B705] px-8 py-3 rounded-full font-bold cursor-pointer hover:bg-[#F2B705] hover:text-[#065F2F] transition shadow-lg"
-            >
-              Learn More
-            </Link>
-          </div>
+        <p className="mb-4 text-lg font-bold text-[#F2B705] drop-shadow-lg sm:text-2xl">
+          {subtitle}
+        </p>
+
+        <p className="mb-4 text-base font-semibold italic text-white sm:text-xl">
+          {slogan}
+        </p>
+
+        <p className="mx-auto mb-8 max-w-2xl text-sm leading-relaxed text-white/90 sm:text-base md:text-lg">
+          Uniting young people, supporting their potential, and working together
+          for the growth of Jenta Adamu Ward.
+        </p>
+
+        <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+          <a
+            href="#about"
+            onClick={(event) => scrollToSection(event, "about")}
+            className="rounded-full bg-[#F2B705] px-8 py-3 font-bold text-[#034324] shadow-lg transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            About the Council
+          </a>
+          <a
+            href="#projects"
+            onClick={(event) => scrollToSection(event, "projects")}
+            className="rounded-full border border-white/70 bg-white/5 px-8 py-3 font-bold text-white transition hover:bg-white hover:text-[#065F2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            Explore Our Projects
+          </a>
         </div>
+
+        {slides.length > 1 && (
+          <div className="mt-7 flex justify-center gap-2" aria-label="Background photos">
+            {slides.map((slide, index) => (
+              <button
+                key={slide.url}
+                type="button"
+                aria-label={`Show background photo ${index + 1}`}
+                aria-pressed={index === activeIndex}
+                onClick={() => {
+                  setCurrentIndex(index);
+                  setIsPaused(true);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+              >
+                <span className={`block h-2.5 rounded-full transition-all ${
+                  index === activeIndex ? "w-6 bg-[#F2B705]" : "w-2.5 bg-white/60"
+                }`} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* PROGRESS RIBBON */}
-      <div className="new-dawn-progress-ribbon absolute left-0 right-0 bottom-0 z-30 px-4 pb-5 md:pb-7">
-        <div className="max-w-6xl mx-auto overflow-hidden rounded-2xl border border-[#F2B705]/40 bg-white/90 backdrop-blur-md shadow-2xl">
+      <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-5 md:pb-7">
+        <div className="mx-auto mb-2 flex max-w-6xl justify-end">
+          <button
+            type="button"
+            onClick={() => setIsPaused((previous) => !previous)}
+            disabled={reducedMotion}
+            aria-pressed={motionPaused}
+            aria-label={motionPaused ? "Resume slideshow and ticker" : "Pause slideshow and ticker"}
+            className="rounded-full border border-white/30 bg-[#012C1A]/80 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#065F2F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
+          >
+            {reducedMotion ? "Motion reduced" : isPaused ? "Resume motion" : "Pause motion"}
+          </button>
+        </div>
+
+        <div className="mx-auto max-w-6xl overflow-hidden rounded-2xl border border-[#9ED46D]/40 bg-white/95 shadow-2xl backdrop-blur-md">
           <div className="flex items-center">
-            <div className="shrink-0 bg-[#065F2F] px-4 md:px-6 py-4 text-left">
-              <p className="text-[10px] md:text-xs font-extrabold uppercase tracking-[0.28em] text-[#F2B705]">
-                Progress
+            <div className="shrink-0 bg-[#065F2F] px-4 py-4 text-left md:px-6">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#C4E9A9] md:text-xs">
+                CYC
               </p>
-              <p className="text-xs md:text-sm font-bold text-white">
-                Highlights
-              </p>
+              <p className="text-xs font-bold text-white md:text-sm">Our Focus</p>
             </div>
 
-            <div className="relative flex-1 overflow-hidden py-4">
-              <div className="pointer-events-none absolute left-0 top-0 h-full w-12 bg-gradient-to-r from-white/90 to-transparent z-10"></div>
-              <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-gradient-to-l from-white/90 to-transparent z-10"></div>
+            <div className="cyc-ticker-window relative min-w-0 flex-1 overflow-hidden py-4">
+              <p className="sr-only">{FOCUS_HIGHLIGHTS.join(". ")}</p>
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-white to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-white to-transparent" />
 
               <div
-                className="new-dawn-ticker-track whitespace-nowrap text-sm md:text-base font-semibold text-[#065F2F]"
-                style={{ display: "inline-block", paddingLeft: "100%" }}
+                className="cyc-ticker-track text-sm font-semibold text-[#065F2F] md:text-base"
+                aria-hidden="true"
+                style={{ animationPlayState: motionPaused ? "paused" : "running" }}
               >
-                {tickerText}
+                {[0, 1].map((copy) => (
+                  <div key={copy} className="flex shrink-0 items-center gap-6 whitespace-nowrap pr-6">
+                    {FOCUS_HIGHLIGHTS.map((highlight) => (
+                      <span key={highlight} className="inline-flex items-center gap-6">
+                        <span>{highlight}</span>
+                        <span className="text-[#0B7A3E]">✦</span>
+                      </span>
+                    ))}
+                  </div>
+                ))}
               </div>
-            </div>
-
-            <div className="hidden md:flex shrink-0 items-center px-5 py-4 border-l border-[#C9F5DC]">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#0B7A3E] mr-2 animate-pulse"></span>
-              <span className="text-xs font-extrabold uppercase tracking-wider text-[#065F2F]">
-                Live Story
-              </span>
             </div>
           </div>
         </div>

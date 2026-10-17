@@ -3,11 +3,10 @@ import "./App.css";
 
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
-import Programme from "./components/Programme";
-import Documentary from "./components/Documentary";
-import Archives from "./components/Archives";
-import News from "./components/News";
 import AboutUs from "./components/About";
+import Exco from "./components/Exco";
+import News from "./components/News";
+import Gallery from "./components/Gallery";
 import Contact from "./components/Contact";
 import Inbox from "./components/Inbox";
 import Footer from "./components/Footer";
@@ -16,40 +15,23 @@ import WhatsAppIcon from "./components/watsappComponent";
 function App() {
   return (
     <>
-      <div className="mt-[1px]">
-        {/* NAV */}
-        <Navbar />
+      <Navbar />
 
-        {/* HERO */}
+      <main>
         <Hero />
 
-        {/* PROGRAMME */}
-        {/* <Programme /> */}
-
-        {/* DOCUMENTARY */}
-        <Documentary />
-
-        {/* ARCHIVES */}
-        <Archives />
-
-        {/* NEWS */}
-        <News />
-
-        {/* ABOUT */}
+        {/* AboutUs also contains the Projects section. */}
         <AboutUs />
 
-        {/* CONTACT */}
+        <Exco />
+        <News />
+        <Gallery />
         <Contact />
-
-        {/* ADMIN INBOX */}
         <Inbox />
+      </main>
 
-        {/* FLOATING WHATSAPP */}
-        <WhatsAppIcon />
-
-        {/* FOOTER */}
-        <Footer />
-      </div>
+      <WhatsAppIcon />
+      <Footer />
     </>
   );
 }
